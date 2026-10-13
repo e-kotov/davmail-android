@@ -34,7 +34,7 @@ jobs:
           ./gradlew --no-daemon assembleRelease -PappVersion="$version" -PappVersionCode="$code"
           out="DavMail-Android-$version.apk"
           cp app/build/outputs/apk/release/app-release.apk "$out"
-          "$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner" verify --print-certs "$out" | grep -E 'Signer #1 certificate (DN|SHA-256)'
+          "$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner" verify --verbose --print-certs "$out"
           sha256sum "$out" > SHA256SUMS
           rm -f "$DAVMAIL_ANDROID_KEYSTORE"
       - name: Publish release
