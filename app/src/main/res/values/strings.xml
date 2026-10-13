@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DavMail</string>
+    <string name="channel_name">Gateway status</string>
+    <string name="status">%1$s\nDavMail %2$s</string>
+    <string name="help">CalDAV gateway to Exchange (EWS), on this phone only. Paste or import a DavMail properties file, then Save and start. In DAVx⁵ add an account with a base URL of http://127.0.0.1:PORT/principals/users/EMAIL/ and your Exchange user name and password; they stay on this phone. Exempt the app from battery optimisation so the gateway keeps running.</string>
+    <string name="save_start">Save and start</string>
+    <string name="stop">Stop</string>
+    <string name="stopped">Stopped</string>
+    <string name="saved">Saved; starting</string>
+    <string name="import_file">Import properties file…</string>
+    <string name="imported">Imported; review and save</string>
+    <string name="battery">Allow running in background</string>
+    <string name="battery_ok">Already exempt from battery optimisation</string>
+    <string name="show_log">Show log</string>
+    <string name="log_empty">Log is empty</string>
+</resources>

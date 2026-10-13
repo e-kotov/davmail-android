@@ -1,0 +1,131 @@
+import java.security.MessageDigest
+
+plugins {
+    id 'com.android.application'
+}
+
+def pin = new Properties()
+rootProject.file('gradle/davmail.properties').withInputStream { pin.load(it) }
+
+def davDir = layout.buildDirectory.dir('davmail')
+def davZip = davDir.map { it.file("davmail-${pin.version}.zip") }
+def mergedJar = davDir.map { it.file('davmail-merged.jar') }
+def androidJar = davDir.map { it.file('davmail-android.jar') }
+
+configurations {
+    jarjar
+}
+
+// Fetch the pinned DavMail release and refuse it unless the SHA-256 matches.
+def downloadDavmail = tasks.register('downloadDavmail') {
+    inputs.property('url', pin.url)
+    inputs.property('sha256', pin.sha256)
+    outputs.file(davZip)
+    doLast {
+        def f = davZip.get().asFile
+        f.parentFile.mkdirs()
+        new URI(pin.url).toURL().withInputStream { i -> f.withOutputStream { it << i } }
+        def md = MessageDigest.getInstance('SHA-256')
+        f.eachByte(65536) { buf, n -> md.update(buf, 0, n) }
+        def got = md.digest().encodeHex().toString()
+        if (got != pin.sha256) {
+            f.delete()
+            throw new GradleException("DavMail release checksum mismatch: ${got}")
+        }
+    }
+}
+
+// davmail.jar and lib/*.jar as one jar. The bundled log4j.properties is dropped because
+// reload4j's PropertyConfigurator needs java.beans, which Android lacks.
+def mergeDavmail = tasks.register('mergeDavmail') {
+    dependsOn downloadDavmail
+    def unpacked = davDir.map { it.dir('unpacked') }
+    inputs.file(davZip)
+    outputs.file(mergedJar)
+    doLast {
+        def dir = unpacked.get().asFile
+        project.delete(dir)
+        ant.unzip(src: davZip.get().asFile, dest: dir) {
+            patternset { include(name: 'davmail.jar'); include(name: 'lib/*.jar') }
+        }
+        def jars = [new File(dir, 'davmail.jar')] + new File(dir, 'lib').listFiles().findAll { it.name.endsWith('.jar') }.sort()
+        def out = mergedJar.get().asFile
+        out.delete()
+        ant.jar(destfile: out, duplicate: 'preserve') {
+            jars.each { j ->
+                zipfileset(src: j, excludes: 'META-INF/*.SF,META-INF/*.RSA,META-INF/*.DSA,META-INF/MANIFEST.MF,META-INF/versions/**,module-info.class,log4j.properties')
+            }
+        }
+    }
+}
+
+// Android's boot class path has its own org.apache.http, which shadows HttpClient 4.5;
+// relocate it (and its logging/codec dependencies) into DavMail's namespace.
+def relocateDavmail = tasks.register('relocateDavmail', JavaExec) {
+    dependsOn mergeDavmail
+    def rules = rootProject.file('gradle/jarjar-rules.txt')
+    inputs.file(rules)
+    inputs.file(mergedJar)
+    outputs.file(androidJar)
+    classpath = configurations.jarjar
+    mainClass = 'org.pantsbuild.jarjar.Main'
+    args 'process', rules.absolutePath, mergedJar.get().asFile.absolutePath, androidJar.get().asFile.absolutePath
+}
+
+dependencies {
+    jarjar('org.pantsbuild:jarjar:1.7.2') {
+        exclude group: 'org.apache.ant'
+        exclude group: 'org.apache.maven'
+    }
+    implementation files(androidJar).builtBy(relocateDavmail)
+}
+
+def releaseKeystore = System.getenv('DAVMAIL_ANDROID_KEYSTORE')
+
+android {
+    namespace = 'io.github.ekotov.davmail'
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = 'io.github.ekotov.davmail'
+        minSdk = 30
+        targetSdk = 35
+        versionCode = providers.gradleProperty('appVersionCode').getOrElse('1') as int
+        versionName = providers.gradleProperty('appVersion').getOrElse('0.0.0-dev')
+        buildConfigField 'String', 'DAVMAIL_VERSION', "\"${pin.version}\""
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    signingConfigs {
+        if (releaseKeystore) {
+            release {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv('DAVMAIL_ANDROID_STORE_PASSWORD')
+                keyAlias = System.getenv('DAVMAIL_ANDROID_KEY_ALIAS')
+                keyPassword = System.getenv('DAVMAIL_ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled = false
+            if (releaseKeystore) {
+                signingConfig = signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    lint {
+        // DavMail's desktop code references java.awt and javax.naming, which are never loaded here.
+        disable += 'InvalidPackage'
+    }
+}

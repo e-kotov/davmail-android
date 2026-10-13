@@ -1,0 +1,3 @@
+rule org.apache.http.** davmail.shaded.http.@1
+rule org.apache.commons.logging.** davmail.shaded.logging.@1
+rule org.apache.commons.codec.** davmail.shaded.codec.@1
