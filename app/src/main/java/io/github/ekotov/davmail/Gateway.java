@@ -50,7 +50,7 @@ final class Gateway {
         if (port <= 0) {
             throw new IOException("davmail.caldavPort is not set");
         }
-        CaldavServer caldav = new CaldavServer(port);
+        CaldavServer caldav = new ManagedCaldavServer(port);
         try {
             caldav.bind();
             caldav.start();
