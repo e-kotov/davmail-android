@@ -8,7 +8,14 @@
     <string name="stop">Stop</string>
     <string name="stopped">Stopped</string>
     <string name="saved">Saved; starting</string>
-    <string name="import_file">Import properties file…</string>
+    <string name="import_file">Import a copy…</string>
+    <string name="link_file">Link file and watch changes…</string>
+    <string name="unlink_file">Use saved copy instead</string>
+    <string name="unlinked">Link removed; saved copy is now editable</string>
+    <string name="linked">Linked; stable file changes reload automatically while running</string>
+    <string name="linked_source">Linked: %1$s. Last applied config shown below (read-only). Changes are checked every 5 seconds while running.</string>
+    <string name="local_source">Config: editable saved copy. Import a copy once, or link a file to follow future changes.</string>
+    <string name="reload_linked">Start / reload linked config</string>
     <string name="imported">Imported; review and save</string>
     <string name="battery">Allow running in background</string>
     <string name="battery_ok">Already exempt from battery optimisation</string>

@@ -18,6 +18,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Tests and lint (release gate)
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug
       - name: Build signed APK
         env:
           KEYSTORE_B64: ${{ secrets.DAVMAIL_ANDROID_KEYSTORE_B64 }}
@@ -46,3 +48,13 @@ jobs:
           davmail=$(grep '^version=' gradle/davmail.properties | cut -d= -f2)
           notes="DavMail for Android $version, embedding DavMail $davmail from https://github.com/e-kotov/davmail."
           gh release create "$TAG" "DavMail-Android-$version.apk" SHA256SUMS --verify-tag --title "DavMail for Android $version" --notes "$notes"
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-check-reports
+          path: |
+            app/build/reports/tests/
+            app/build/reports/lint-results-*
+            app/build/test-results/
+          if-no-files-found: ignore

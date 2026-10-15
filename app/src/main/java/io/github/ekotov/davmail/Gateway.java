@@ -5,9 +5,8 @@ import davmail.caldav.CaldavServer;
 import davmail.exchange.ExchangeSessionFactory;
 
 import java.io.File;
-import java.io.FileInputStream;
+import java.io.StringReader;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
@@ -18,20 +17,19 @@ import java.util.Set;
  */
 final class Gateway {
     private static CaldavServer server;
+    private static Object activeOwner;
     private static Set<String> appliedKeys = new HashSet<>();
 
     private Gateway() {
     }
 
-    static synchronized int start(File config, File effective, File logFile) throws Exception {
-        stop();
+    static synchronized int start(String config, File effective, File logFile, Object owner) throws Exception {
+        stopCurrent();
         // Skip reload4j's default configuration, which needs java.beans.
         System.setProperty("log4j.defaultInitOverride", "true");
 
         Properties properties = new Properties();
-        try (InputStream in = new FileInputStream(config)) {
-            properties.load(in);
-        }
+        properties.load(new StringReader(config));
         applyOverrides(properties, logFile);
 
         // Remove missing keys: an absent calendar include list differs from an empty one.
@@ -53,13 +51,24 @@ final class Gateway {
             throw new IOException("davmail.caldavPort is not set");
         }
         CaldavServer caldav = new CaldavServer(port);
-        caldav.bind();
-        caldav.start();
+        try {
+            caldav.bind();
+            caldav.start();
+        } catch (Exception e) {
+            caldav.close();
+            throw e;
+        }
         server = caldav;
+        activeOwner = owner;
         return port;
     }
 
-    static synchronized void stop() {
+    static synchronized void stop(Object owner) {
+        if (activeOwner == owner) { stopCurrent(); }
+    }
+
+    private static void stopCurrent() {
+        activeOwner = null;
         if (server != null) {
             server.close();
             server = null;

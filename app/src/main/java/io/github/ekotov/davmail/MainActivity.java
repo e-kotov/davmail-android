@@ -14,6 +14,7 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import android.text.InputType;
 import android.view.ViewGroup;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -22,23 +23,31 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.RandomAccessFile;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.nio.charset.StandardCharsets;
 
 /** Status, config editor and controls. Built in code to keep the app free of AndroidX. */
 public class MainActivity extends Activity {
     private static final int REQUEST_IMPORT = 1;
+    private static final int REQUEST_LINK = 2;
+    private final ExecutorService files = Executors.newSingleThreadExecutor();
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private TextView statusView;
     private TextView logView;
     private EditText configView;
+    private TextView sourceView;
+    private Button saveButton;
+    private Button detachButton;
+    private String displayedCache;
 
     private final Runnable refresh = new Runnable() {
         @Override
         public void run() {
             statusView.setText(getString(R.string.status, GatewayService.status, BuildConfig.DAVMAIL_VERSION));
+            refreshSource();
             handler.postDelayed(this, 1000);
         }
     };
@@ -63,12 +72,25 @@ public class MainActivity extends Activity {
         help.setPadding(0, pad, 0, pad);
         root.addView(help);
 
-        root.addView(button(R.string.save_start, v -> saveAndStart()));
+        sourceView = new TextView(this);
+        root.addView(sourceView);
+        saveButton = button(R.string.save_start, v -> saveAndStart());
+        root.addView(saveButton);
         root.addView(button(R.string.stop, v -> {
             GatewayService.stop(this);
             toast(R.string.stopped);
         }));
-        root.addView(button(R.string.import_file, v -> importFile()));
+        root.addView(button(R.string.import_file, v -> pickFile(REQUEST_IMPORT)));
+        root.addView(button(R.string.link_file, v -> pickFile(REQUEST_LINK)));
+        detachButton = button(R.string.unlink_file, v -> {
+            try {
+                Config.unlink(this);
+                configView.setText(Config.read(this));
+                refreshSource();
+                toast(R.string.unlinked);
+            } catch (IOException e) { toast(e.getMessage()); }
+        });
+        root.addView(detachButton);
         root.addView(button(R.string.battery, v -> requestBatteryExemption()));
         root.addView(button(R.string.show_log, v -> showLog()));
 
@@ -96,6 +118,10 @@ public class MainActivity extends Activity {
         } catch (IOException e) {
             toast(e.getMessage());
         }
+        if (savedInstanceState != null && Config.linkedUri(this) == null) {
+            configView.setText(savedInstanceState.getString("editor", configView.getText().toString()));
+        }
+        refreshSource();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 0);
@@ -124,7 +150,9 @@ public class MainActivity extends Activity {
 
     private void saveAndStart() {
         try {
-            Config.write(this, configView.getText().toString());
+            if (Config.linkedUri(this) == null) {
+                Config.saveLocal(this, configView.getText().toString());
+            }
             GatewayService.start(this);
             toast(R.string.saved);
         } catch (IOException e) {
@@ -132,24 +160,77 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void importFile() {
+    private void pickFile(int request) {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
-        startActivityForResult(intent, REQUEST_IMPORT);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        if (request == REQUEST_LINK) { intent.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION); }
+        startActivityForResult(intent, request);
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_IMPORT && resultCode == RESULT_OK && data != null && data.getData() != null) {
-            try (InputStream in = getContentResolver().openInputStream(data.getData())) {
-                configView.setText(new String(Config.readAll(in), StandardCharsets.UTF_8));
-                toast(R.string.imported);
-            } catch (IOException e) {
-                toast(e.getMessage());
+        if ((requestCode != REQUEST_IMPORT && requestCode != REQUEST_LINK)
+                || resultCode != RESULT_OK || data == null || data.getData() == null) { return; }
+        Uri uri = data.getData();
+        files.execute(() -> {
+            try {
+                if (requestCode == REQUEST_LINK) {
+                    Config.link(this, uri, data.getFlags());
+                    runOnUiThread(() -> {
+                        if (isDestroyed()) { return; }
+                        refreshSource();
+                        GatewayService.start(this);
+                        toast(R.string.linked);
+                    });
+                } else {
+                    String text = Config.readDocument(this, uri);
+                    Config.unlink(this);
+                    runOnUiThread(() -> {
+                        if (isDestroyed()) { return; }
+                        refreshSource();
+                        configView.setText(text);
+                        toast(R.string.imported);
+                    });
+                }
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    if (!isDestroyed()) { toast("Cannot open config: " + e.getMessage()); }
+                });
             }
+        });
+    }
+
+    private void refreshSource() {
+        boolean linked = Config.linkedUri(this) != null;
+        sourceView.setText(linked ? getString(R.string.linked_source, Config.linkedName(this))
+                : getString(R.string.local_source));
+        configView.setEnabled(!linked);
+        saveButton.setText(linked ? R.string.reload_linked : R.string.save_start);
+        detachButton.setVisibility(linked ? View.VISIBLE : View.GONE);
+        if (linked) {
+            try {
+                String cached = Config.read(this);
+                if (!cached.equals(displayedCache)) { configView.setText(cached); }
+                displayedCache = cached;
+            } catch (IOException ignored) { /* Service status reports a read failure. */ }
+        } else {
+            displayedCache = null;
         }
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle state) {
+        state.putString("editor", configView.getText().toString());
+        super.onSaveInstanceState(state);
+    }
+
+    @Override
+    protected void onDestroy() {
+        files.shutdownNow();
+        super.onDestroy();
     }
 
     private void requestBatteryExemption() {
