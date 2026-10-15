@@ -53,12 +53,17 @@ reboot or an app update if it was running.
 - A stopped gateway does not watch files. Starting it again checks the linked file. If Android
   pauses the app, checks resume when the process runs again; normal battery exemptions still apply.
 
-For chezmoi in Termux, keep the source properties in the Termux dotfiles repository, deploy it
-with `chezmoi apply`, and copy it to a stable shared-storage file such as
-`~/storage/shared/Download/davmail.properties` (Termux storage access must already be enabled).
-Select that file once with **Link file and watch changes…**. Subsequent edits to that same file
-are picked up automatically while the gateway runs; you do not need another import or restart.
-Prefer writing the complete file promptly. If a provider invalidates the document URI after a
+For chezmoi in Termux, keep the source properties in the Termux dotfiles repository and deploy
+it with `chezmoi apply` (for example as `~/davmail.properties`). In DavMail choose **Link file and
+watch changes…**, select **Termux** in Android's file picker, and choose that file once.
+Termux's [document provider](https://github.com/termux/termux-app/blob/master/app/src/main/java/com/termux/filepicker/TermuxDocumentsProvider.java)
+exposes the home directory through user-selected document access; it identifies files by their
+path, so atomic replacement at the same path is supported. This route does not need a shared
+Downloads copy. If Termux is unavailable in the picker, copy the managed config to a stable
+shared-storage file such as `~/storage/shared/Download/davmail.properties` (Termux storage
+access must already be enabled) and select that instead.
+Subsequent source-file changes are picked up while the gateway runs; no re-import or manual
+restart is needed. Prefer writing the complete file atomically or promptly. If a provider invalidates the document URI after a
 file is moved, deleted or replaced, select it again. Android documents this limitation of
 [persistent document access](https://developer.android.com/training/data-storage/shared/documents-files#persist-permissions).
 The app does not need root or broad storage permissions.
