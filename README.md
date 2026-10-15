@@ -23,9 +23,14 @@ event contents are not written.
 4. In DAVx⁵, add an account with a URL and user name. Use the base URL
    `http://127.0.0.1:<caldavPort>/principals/users/<email>/` and your Exchange login.
 
-To expose only shared calendars, add `davmail.hideDefaultCalendar=true` to the config,
-then **Save and start** and refresh the calendar list in DAVx⁵. This hides the personal
-calendar without deleting any Exchange data.
+To hide your main calendar, add `davmail.calendarsExclude=@default` to the config,
+then **Save and start** and refresh the calendar list in DAVx⁵. To show only selected
+calendars instead, use `davmail.calendarsInclude=alias_a,alias_b`. Both lists may be set:
+include selects the starting set, then exclude removes entries (exclusion wins).
+An absent include list means all calendars; an explicitly empty include list means none.
+Names are exact top-level calendar or alias names; wildcards are not supported.
+The old `davmail.hideDefaultCalendar=true` setting remains compatible. These settings
+change only this gateway's visibility and never delete Exchange data.
 
 The gateway runs as a foreground service with a persistent notification. It restarts after a
 reboot or an app update if it was running.

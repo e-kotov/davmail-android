@@ -34,10 +34,10 @@ final class Gateway {
         }
         applyOverrides(properties, logFile);
 
-        // DavMail settings cannot be cleared, so blank keys that a previous config set.
+        // Remove missing keys: an absent calendar include list differs from an empty one.
         for (String key : appliedKeys) {
             if (!properties.containsKey(key)) {
-                Settings.setProperty(key, "");
+                Settings.removeProperty(key);
             }
         }
         // Writes from DavMail (Settings.save) go to a scratch copy, not the user's file.
