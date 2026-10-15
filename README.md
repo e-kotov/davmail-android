@@ -23,6 +23,10 @@ event contents are not written.
 4. In DAVx⁵, add an account with a URL and user name. Use the base URL
    `http://127.0.0.1:<caldavPort>/principals/users/<email>/` and your Exchange login.
 
+To expose only shared calendars, add `davmail.hideDefaultCalendar=true` to the config,
+then **Save and start** and refresh the calendar list in DAVx⁵. This hides the personal
+calendar without deleting any Exchange data.
+
 The gateway runs as a foreground service with a persistent notification. It restarts after a
 reboot or an app update if it was running.
 
